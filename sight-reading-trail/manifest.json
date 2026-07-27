@@ -1,0 +1,12 @@
+{
+  "name": "Sight Reading Trail",
+  "short_name": "Sight Trail",
+  "description": "A Duolingo-style interval sight-reading course.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7f7fb",
+  "theme_color": "#5b4fe9",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
