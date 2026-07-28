@@ -436,17 +436,26 @@ function nextQuestion() {
   currentLesson.questionNumber += 1;
   currentLesson.answered = false;
   currentLesson.question = makeQuestion(currentLesson.stage);
-  renderQuestion();
+  Question();
 }
 
 function renderQuestion() {
   const { stage, mode, questionNumber, total, score, question } = currentLesson;
   const modeInfo = MODES.find(item => item.id === mode);
-  els.lessonKicker.textContent = currentLesson.kind === "practice"
-    ? `Practice \u00b7 ${modeInfo.label} \u00b7 ${stage.singularTitle}`
-    : currentLesson.kind === "skip"
-      ? `Skip assessment \u00b7 ${modeInfo.label} \u00b7 ${stage.singularTitle}`
-      : `Stage ${stage.id} \u00b7 ${modeInfo.label}`;
+  const isIntervalIdentification = mode === "read" || mode === "listen";
+  if (isIntervalIdentification) {
+    els.lessonKicker.textContent = currentLesson.kind === "practice"
+      ? `Practice · ${modeInfo.label}`
+      : currentLesson.kind === "skip"
+        ? `Skip assessment · ${modeInfo.label}`
+        : `Stage ${stage.id} · ${modeInfo.label}`;
+  } else {
+    els.lessonKicker.textContent = currentLesson.kind === "practice"
+      ? `Practice · ${modeInfo.label} · ${stage.singularTitle}`
+      : currentLesson.kind === "skip"
+        ? `Skip assessment · ${modeInfo.label} · ${stage.singularTitle}`
+        : `Stage ${stage.id} · ${modeInfo.label}`;
+  }
   els.lessonProgressFill.style.width = `${((questionNumber - 1) / total) * 100}%`;
   els.scoreValue.textContent = score;
   els.lessonMessage.textContent = "";
@@ -459,14 +468,14 @@ function renderQuestion() {
 
   if (mode === "read") {
     els.lessonPrompt.textContent = "Which interval is shown?";
-    els.lessonSubprompt.textContent = `${question.key} \u00b7 ${stage.direction > 0 ? "Ascending" : "Descending"}`;
+    els.lessonSubprompt.textContent = question.key;
     els.notationArea.classList.remove("hidden");
     els.notationArea.innerHTML = renderStaff([question.first, question.second], state.settings.clef, true);
     renderAnswerButtons();
     if (state.settings.autoplay) setTimeout(playCurrentInterval, 250);
   } else if (mode === "listen") {
     els.lessonPrompt.textContent = "Which interval do you hear?";
-    els.lessonSubprompt.textContent = `${stage.direction > 0 ? "Ascending" : "Descending"} interval`;
+    els.lessonSubprompt.textContent = "Listen carefully";
     els.listenArea.classList.remove("hidden");
     renderAnswerButtons();
     if (state.settings.autoplay) setTimeout(playCurrentInterval, 250);
