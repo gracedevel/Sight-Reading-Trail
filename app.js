@@ -128,23 +128,18 @@ function ensureEnhancementUi() {
 
 ensureEnhancementUi();
 
-const PRACTICE_MODES = [
-  ...MODES,
-  { id: "singPlus", label: "Sing +", icon: "\u25cb" }
-];
-
-function getModeInfo(mode) {
-  return PRACTICE_MODES.find(item => item.id === mode) || { id: mode, label: String(mode || ""), icon: "" };
+function getLessonModeInfo(mode) {
+  if (mode === "singPlus") return { id: "singPlus", label: "Sing +", icon: "○" };
+  return MODES.find(item => item.id === mode) || { id: mode, label: String(mode || ""), icon: "" };
 }
 
-function ensurePracticeModeUi() {
+function ensurePracticeModeSettingsUi() {
   const settingsCard = document.querySelector(".settings-card");
   if (!settingsCard) return;
 
-  const fieldsets = [...settingsCard.querySelectorAll("fieldset")];
-  const practiceFieldsets = fieldsets.filter(fieldset => {
+  const practiceFieldsets = [...settingsCard.querySelectorAll("fieldset")].filter(fieldset => {
     const legend = fieldset.querySelector("legend")?.textContent?.trim();
-    return legend === "Practice mode" || fieldset.id === "practiceModeFieldset";
+    return legend === "Practice mode" || fieldset.querySelector('input[name="practiceMode"]');
   });
 
   let fieldset = practiceFieldsets[0] || null;
@@ -175,15 +170,15 @@ function ensurePracticeModeUi() {
 
   const autoplayToggle = document.getElementById("autoplayToggle");
   if (autoplayToggle) {
-    const autoplayFieldset = autoplayToggle.closest("fieldset");
-    if (autoplayFieldset) autoplayFieldset.remove();
-    else autoplayToggle.closest("label")?.remove();
+    autoplayToggle.closest("fieldset")?.remove();
+    autoplayToggle.closest("label")?.remove();
   }
 }
 
-ensurePracticeModeUi();
+ensurePracticeModeSettingsUi();
 
 const els = Object.fromEntries([
+
   "pathView","lessonView","resultView","settingsView","pathway","xpValue","streakValue","progressText","progressFill",
   "homeButton","settingsButton","closeLessonButton","closeSettingsButton","saveSettingsButton","resetProgressButton",
   "lessonKicker","lessonPrompt","lessonSubprompt","notationArea","listenArea","singArea","replayButton","recordButton",
@@ -427,26 +422,47 @@ function startLesson(stageId, mode, retry = false) {
   nextQuestion();
 }
 
-function introducedStages() {
-  const currentStage = Math.min(Math.floor(firstIncompleteIndex() / MODES.length) + 1, COURSE.length);
-  return COURSE.slice(0, currentStage);
+function completedStages() {
+  return COURSE.filter(stage => MODES.every(mode => isComplete(stage.id, mode.id)));
 }
 
 function selectedPracticeModes() {
-  const value = state.settings.practiceMode || "mixed";
-  return value === "mixed" ? PRACTICE_MODES.map(mode => mode.id) : [value];
+  return state.settings.practiceMode === "mixed"
+    ? ["read", "listen", "sing", "singPlus"]
+    : [state.settings.practiceMode];
 }
 
 function makePracticePlan() {
-  const stages = shuffle(introducedStages());
-  const plannedStages = [...stages];
-  while (plannedStages.length < 6) {
-    plannedStages.push(stages[Math.floor(Math.random() * stages.length)]);
+  const stages = shuffle(completedStages());
+  if (!stages.length) return [];
+  const modes = selectedPracticeModes();
+  return stages.map(stage => ({
+    stageId: stage.id,
+    mode: modes[Math.floor(Math.random() * modes.length)]
+  }));
+}
+
+function startPractice() {
+  const completed = completedStages();
+  if (!completed.length) {
+    window.alert("Complete Stage 1 before starting practice.");
+    return;
   }
-  const allowedModes = selectedPracticeModes();
-  const modes = [];
-  while (modes.length < plannedStages.length) modes.push(...shuffle(allowedModes));
-  return plannedStages.map((stage, index) => ({ stageId: stage.id, mode: modes[index] }));
+  primeAudio();
+  const plan = makePracticePlan();
+  currentLesson = {
+    kind: "practice",
+    plan,
+    stage: null,
+    mode: null,
+    questionNumber: 0,
+    score: 0,
+    total: plan.length,
+    answered: false,
+    question: null
+  };
+  showView("lessonView");
+  nextQuestion();
 }
 
 function uniqueStagesByLabel(stages) {
@@ -461,7 +477,7 @@ function uniqueStagesByLabel(stages) {
 function makeSkipAssessmentPlan(targetStage) {
   const plan = [];
   MODES.forEach(mode => {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 3; i += 1) {
       plan.push({ stageId: targetStage.id, mode: mode.id, isTarget: true });
     }
   });
@@ -506,13 +522,14 @@ function nextQuestion() {
 
 function renderQuestion() {
   const { stage, mode, questionNumber, total, score, question } = currentLesson;
-  const modeInfo = getModeInfo(mode);
+  const modeInfo = getLessonModeInfo(mode);
   const isSingMode = mode === "sing" || mode === "singPlus";
-  els.lessonKicker.textContent = currentLesson.kind === "practice"
-    ? `Practice · ${modeInfo.label}${isSingMode ? ` · ${stage.singularTitle}` : ""}`
+  const headerPrefix = currentLesson.kind === "practice"
+    ? `Practice · ${modeInfo.label}`
     : currentLesson.kind === "skip"
-      ? `Skip assessment · ${modeInfo.label}${isSingMode ? ` · ${stage.singularTitle}` : ""}`
-      : `Stage ${stage.id} · ${modeInfo.label}${isSingMode ? ` · ${stage.singularTitle}` : ""}`;
+      ? `Skip assessment · ${modeInfo.label}`
+      : `Stage ${stage.id} · ${modeInfo.label}`;
+  els.lessonKicker.textContent = isSingMode ? `${headerPrefix} · ${stage.singularTitle}` : headerPrefix;
   els.lessonProgressFill.style.width = `${Math.max(0, Math.min(100, ((questionNumber - 1) / total) * 100))}%`;
   els.scoreValue.textContent = score;
   els.lessonMessage.textContent = "";
@@ -534,15 +551,15 @@ function renderQuestion() {
     els.lessonSubprompt.textContent = "Listen carefully";
     els.listenArea.classList.remove("hidden");
     renderAnswerButtons();
-    if (state.settings.autoplay) setTimeout(playCurrentInterval, 250);
+    setTimeout(playCurrentInterval, 250);
   } else if (mode === "sing") {
     els.lessonPrompt.textContent = "Sing the target note";
     els.lessonSubprompt.textContent = `Listen to the starting note, then sing the ${stage.singularTitle.toLowerCase()}.`;
     els.notationArea.classList.remove("hidden");
     els.notationArea.innerHTML = renderStaff([question.first], state.settings.clef, false);
     els.singArea.classList.remove("hidden");
-    els.singTargetText.textContent = stage.singularTitle;
     els.singTargetText.style.display = "";
+    els.singTargetText.textContent = stage.singularTitle;
     els.recordButton.querySelector("strong").textContent = "Sing the target note";
     els.pitchFeedback.textContent = "Play the first note, then sing.";
   } else {
@@ -559,6 +576,7 @@ function renderQuestion() {
 }
 
 function renderAnswerButtons() {
+
   currentLesson.question.options.forEach(option => {
     const button = document.createElement("button");
     button.className = "answer-button";
@@ -773,6 +791,7 @@ async function beginPitchCheck() {
     const sungNote = midiToNoteLabel(median);
     const targetNote = midiToNoteLabel(target);
     const correct = cents <= 55;
+
     if (correct) {
       els.pitchFeedback.innerHTML = isSingPlus
         ? `Correct — you sang <strong>${sungNote}</strong>. Interval type: <strong>${intervalLabel}</strong>.`
@@ -782,6 +801,7 @@ async function beginPitchCheck() {
         ? `Not quite — you sang <strong>${sungNote}</strong> instead of <strong>${targetNote}</strong>. Interval type: <strong>${intervalLabel}</strong>.`
         : `Not quite — you sang <strong>${sungNote}</strong> instead of <strong>${targetNote}</strong>.`;
     }
+
     registerAnswer(
       correct,
       isSingPlus
@@ -803,6 +823,7 @@ async function beginPitchCheck() {
 }
 
 function midiToNoteLabel(midi) {
+
   const names = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
   const note = names[((Math.round(midi) % 12) + 12) % 12];
   const octave = Math.floor(Math.round(midi) / 12) - 1;
@@ -928,9 +949,11 @@ function openSettings() {
   const rangeInput = document.querySelector(`input[name="range"][value="${state.settings.range}"]`);
   if (clefInput) clefInput.checked = true;
   if (rangeInput) rangeInput.checked = true;
+
   const practiceMode = state.settings.practiceMode || "mixed";
   const practiceInput = document.querySelector(`input[name="practiceMode"][value="${practiceMode}"]`);
   if (practiceInput) practiceInput.checked = true;
+
   if (els.autoplayToggle) els.autoplayToggle.checked = state.settings.autoplay;
   showView("settingsView");
 }
@@ -948,6 +971,7 @@ function saveSettings() {
 }
 
 function resetProgress() {
+
   const confirmed = window.confirm("Reset all course progress, XP and streak data on this browser?");
   if (!confirmed) return;
   state = clone(DEFAULT_STATE);
