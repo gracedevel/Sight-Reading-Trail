@@ -114,6 +114,33 @@ function ensureEnhancementUi() {
 
 ensureEnhancementUi();
 
+function injectAppStyles() {
+  if (document.getElementById("appEnhancementStyles")) return;
+  const style = document.createElement("style");
+  style.id = "appEnhancementStyles";
+  style.textContent = `
+    .hero-card {
+      background: linear-gradient(135deg, var(--purple, #5b4fe9), #7568f4) !important;
+      color: #fff !important;
+    }
+    .hero-card * {
+      color: inherit !important;
+    }
+    .hero-card .hero-badge {
+      background: rgba(255, 255, 255, 0.16) !important;
+      color: #fff !important;
+    }
+    .hero-card .eyebrow,
+    .hero-card p,
+    .hero-card h1 {
+      color: inherit !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+injectAppStyles();
+
 function getLessonModeInfo(mode) {
   if (mode === "singPlus") return { id: "singPlus", label: "Sing +", icon: "○" };
   return MODES.find(item => item.id === mode) || { id: mode, label: String(mode || ""), icon: "" };
@@ -121,9 +148,16 @@ function getLessonModeInfo(mode) {
 
 function ensurePracticeModeSettingsUi() {
   const settingsCard = document.querySelector(".settings-card");
-  if (!settingsCard || document.getElementById("practiceModeFieldset")) return;
+  if (!settingsCard) return;
 
-  const soundFieldset = settingsCard.querySelector('fieldset:nth-of-type(3)');
+  settingsCard
+    .querySelectorAll("fieldset")
+    .forEach(fieldset => {
+      const legend = fieldset.querySelector("legend")?.textContent?.trim();
+      const hasAutoplayToggle = Boolean(fieldset.querySelector("#autoplayToggle"));
+      if (legend === "Practice mode" || hasAutoplayToggle) fieldset.remove();
+    });
+
   const fieldset = document.createElement("fieldset");
   fieldset.id = "practiceModeFieldset";
   fieldset.innerHTML = `
@@ -134,7 +168,9 @@ function ensurePracticeModeSettingsUi() {
     <label class="choice-row"><input type="radio" name="practiceMode" value="sing" /><span><strong>Sing only</strong><small>See the first note and sing the target note</small></span><b>●</b></label>
     <label class="choice-row"><input type="radio" name="practiceMode" value="singPlus" /><span><strong>Sing + only</strong><small>See both notes and sing the second note</small></span><b>○</b></label>
   `;
-  settingsCard.insertBefore(fieldset, soundFieldset || null);
+
+  const saveButton = document.getElementById("saveSettingsButton");
+  settingsCard.insertBefore(fieldset, saveButton || null);
 }
 
 ensurePracticeModeSettingsUi();
@@ -518,13 +554,12 @@ function renderQuestion() {
     els.notationArea.classList.remove("hidden");
     els.notationArea.innerHTML = renderStaff([question.first, question.second], state.settings.clef, true);
     renderAnswerButtons();
-    if (state.settings.autoplay) setTimeout(playCurrentInterval, 250);
   } else if (mode === "listen") {
     els.lessonPrompt.textContent = "Which interval do you hear?";
     els.lessonSubprompt.textContent = "Listen carefully";
     els.listenArea.classList.remove("hidden");
     renderAnswerButtons();
-    if (state.settings.autoplay) setTimeout(playCurrentInterval, 250);
+    setTimeout(playCurrentInterval, 250);
   } else if (mode === "sing") {
     els.lessonPrompt.textContent = "Sing the target note";
     els.lessonSubprompt.textContent = `Listen to the starting note, then sing the ${stage.singularTitle.toLowerCase()}.`;
@@ -567,6 +602,7 @@ function answerChoice(option, button) {
   });
   if (!correct) button.classList.add("incorrect");
   registerAnswer(correct, correct ? "Correct!" : `The answer is ${currentLesson.question.correct}.`);
+  if (currentLesson.mode === "read") setTimeout(playCurrentInterval, 250);
 }
 
 function registerAnswer(correct, message) {
@@ -693,7 +729,7 @@ function renderStaff(notes, clef, showSecond) {
   return `<svg viewBox="0 ${viewTop} ${width} ${height}" role="img" aria-label="Music notation in ${clef} clef">
     <text x="30" y="38" fill="#767990" font-size="14" font-weight="800">${notes[0].key || currentLesson?.question?.key || ""}</text>
     ${lines}${ledger}
-    <text x="112" y="139" font-size="80" font-family="serif" fill="#292a3b">${clefSymbol}</text>
+    <text x="${clef === "treble" ? 96 : 112}" y="${clef === "treble" ? 104 : 139}" font-size="${clef === "treble" ? 114 : 80}" font-family="serif" fill="#292a3b">${clefSymbol}</text>
     ${noteSvg}
   </svg>`;
 }
@@ -912,7 +948,6 @@ function openSettings() {
   const practiceMode = state.settings.practiceMode || "mixed";
   const practiceInput = document.querySelector(`input[name="practiceMode"][value="${practiceMode}"]`);
   if (practiceInput) practiceInput.checked = true;
-  els.autoplayToggle.checked = state.settings.autoplay;
   showView("settingsView");
 }
 
@@ -921,7 +956,6 @@ function saveSettings() {
   state.settings.range = document.querySelector('input[name="range"]:checked').value;
   const practiceChecked = document.querySelector('input[name="practiceMode"]:checked');
   state.settings.practiceMode = practiceChecked ? practiceChecked.value : "mixed";
-  state.settings.autoplay = els.autoplayToggle.checked;
   saveState();
   showView("pathView");
 }
