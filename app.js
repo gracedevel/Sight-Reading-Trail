@@ -64,7 +64,7 @@ const INTERVAL_OPTIONS = [...new Set(COURSE.map(stage => stage.label))];
 
 const DEFAULT_STATE = {
   curriculumVersion: CURRICULUM_VERSION,
-  settings: { clef: "treble", range: "middle", autoplay: true, themeColor: "#5b4fe9", practiceMode: "mixed" },
+  settings: { clef: "treble", range: "middle", autoplay: true, practiceMode: "mixed" },
   progress: {},
   xp: 0,
   streak: 0,
@@ -75,36 +75,6 @@ let state = loadState();
 let currentLesson = null;
 let audioContext = null;
 let mediaStream = null;
-
-function normaliseHexColour(value) {
-  const match = String(value || "").trim().match(/^#([0-9a-f]{6})$/i);
-  return match ? `#${match[1].toLowerCase()}` : DEFAULT_STATE.settings.themeColor;
-}
-
-function hexToRgb(hex) {
-  const clean = normaliseHexColour(hex).slice(1);
-  return [0, 2, 4].map(index => Number.parseInt(clean.slice(index, index + 2), 16));
-}
-
-function mixHex(hex, target, amount) {
-  const sourceRgb = hexToRgb(hex);
-  const targetRgb = hexToRgb(target);
-  const mixed = sourceRgb.map((value, index) => Math.round(value + (targetRgb[index] - value) * amount));
-  return `#${mixed.map(value => value.toString(16).padStart(2, "0")).join("")}`;
-}
-
-function applyTheme(colour) {
-  const main = normaliseHexColour(colour);
-  const rgb = hexToRgb(main);
-  const rootStyle = document.documentElement.style;
-  rootStyle.setProperty("--purple", main);
-  rootStyle.setProperty("--purple-dark", mixHex(main, "#000000", 0.25));
-  rootStyle.setProperty("--purple-light", mixHex(main, "#ffffff", 0.22));
-  rootStyle.setProperty("--purple-pale", mixHex(main, "#ffffff", 0.9));
-  rootStyle.setProperty("--purple-rgb", rgb.join(", "));
-  const themeMeta = document.querySelector('meta[name="theme-color"]');
-  if (themeMeta) themeMeta.setAttribute("content", main);
-}
 
 function ensureEnhancementUi() {
   const returnPathButton = document.getElementById("returnPathButton");
@@ -144,13 +114,39 @@ function ensureEnhancementUi() {
 
 ensureEnhancementUi();
 
+function getLessonModeInfo(mode) {
+  if (mode === "singPlus") return { id: "singPlus", label: "Sing +", icon: "○" };
+  return MODES.find(item => item.id === mode) || { id: mode, label: String(mode || ""), icon: "" };
+}
+
+function ensurePracticeModeSettingsUi() {
+  const settingsCard = document.querySelector(".settings-card");
+  if (!settingsCard || document.getElementById("practiceModeFieldset")) return;
+
+  const soundFieldset = settingsCard.querySelector('fieldset:nth-of-type(3)');
+  const fieldset = document.createElement("fieldset");
+  fieldset.id = "practiceModeFieldset";
+  fieldset.innerHTML = `
+    <legend>Practice mode</legend>
+    <label class="choice-row"><input type="radio" name="practiceMode" value="mixed" checked /><span><strong>Mixed</strong><small>Read, listen, sing and sing +</small></span><b>◎</b></label>
+    <label class="choice-row"><input type="radio" name="practiceMode" value="read" /><span><strong>Read only</strong><small>Show the notation only</small></span><b>♩</b></label>
+    <label class="choice-row"><input type="radio" name="practiceMode" value="listen" /><span><strong>Listen only</strong><small>Hear the interval only</small></span><b>♪</b></label>
+    <label class="choice-row"><input type="radio" name="practiceMode" value="sing" /><span><strong>Sing only</strong><small>See the first note and sing the target note</small></span><b>●</b></label>
+    <label class="choice-row"><input type="radio" name="practiceMode" value="singPlus" /><span><strong>Sing + only</strong><small>See both notes and sing the second note</small></span><b>○</b></label>
+  `;
+  settingsCard.insertBefore(fieldset, soundFieldset || null);
+}
+
+ensurePracticeModeSettingsUi();
+
 const els = Object.fromEntries([
+
   "pathView","lessonView","resultView","settingsView","pathway","xpValue","streakValue","progressText","progressFill",
   "homeButton","settingsButton","closeLessonButton","closeSettingsButton","saveSettingsButton","resetProgressButton",
   "lessonKicker","lessonPrompt","lessonSubprompt","notationArea","listenArea","singArea","replayButton","recordButton",
   "pitchFeedback","singTargetText","answerGrid","lessonMessage","continueButton","lessonProgressFill","scoreValue",
   "resultTitle","resultSummary","resultScore","resultXp","nextLevelButton","returnPathButton","retryButton","navPath","navPractice","navSettings",
-  "autoplayToggle","themeColorInput"
+  "autoplayToggle"
 ].map(id => [id, document.getElementById(id)]));
 
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
@@ -210,8 +206,6 @@ function saveState() {
   localStorage.setItem("sightTrailState", encodeURIComponent(raw));
 }
 
-applyTheme(state.settings.themeColor);
-
 function levelKey(stageId, mode) { return `${stageId}-${mode}`; }
 function isComplete(stageId, mode) { return Boolean(state.progress[levelKey(stageId, mode)]); }
 
@@ -269,7 +263,7 @@ function renderPathway() {
       testOutButton.type = "button";
       testOutButton.className = "test-out-button";
       testOutButton.textContent = "Skip stage";
-      testOutButton.title = "Pass Read, Listen and Sing questions for this stage to complete all three levels.";
+      testOutButton.title = "Pass a mixed Read, Listen and Sing assessment to complete all three levels.";
       testOutButton.addEventListener("click", () => startSkipAssessment(stage.id));
       copy.appendChild(testOutButton);
     }
@@ -389,35 +383,36 @@ function startLesson(stageId, mode, retry = false) {
   nextQuestion();
 }
 
-function introducedStages() {
-  const currentStage = Math.min(Math.floor(firstIncompleteIndex() / MODES.length) + 1, COURSE.length);
-  return COURSE.slice(0, currentStage);
+function completedStages() {
+  return COURSE.filter(stage => MODES.every(mode => isComplete(stage.id, mode.id)));
 }
 
-function makePracticePlan(practiceMode = state.settings.practiceMode) {
-  const stages = shuffle(introducedStages());
-  const plannedStages = [...stages];
-  while (plannedStages.length < 6) {
-    plannedStages.push(stages[Math.floor(Math.random() * stages.length)]);
-  }
+function selectedPracticeModes() {
+  return state.settings.practiceMode === "mixed"
+    ? ["read", "listen", "sing", "singPlus"]
+    : [state.settings.practiceMode];
+}
 
-  if (practiceMode !== "mixed") {
-    const selectedMode = MODES.some(mode => mode.id === practiceMode) ? practiceMode : "read";
-    return plannedStages.map(stage => ({ stageId: stage.id, mode: selectedMode }));
-  }
-
-  const modes = [];
-  while (modes.length < plannedStages.length) modes.push(...shuffle(MODES.map(mode => mode.id)));
-  return plannedStages.map((stage, index) => ({ stageId: stage.id, mode: modes[index] }));
+function makePracticePlan() {
+  const stages = shuffle(completedStages());
+  if (!stages.length) return [];
+  const modes = selectedPracticeModes();
+  return stages.map(stage => ({
+    stageId: stage.id,
+    mode: modes[Math.floor(Math.random() * modes.length)]
+  }));
 }
 
 function startPractice() {
+  const completed = completedStages();
+  if (!completed.length) {
+    window.alert("Complete Stage 1 before starting practice.");
+    return;
+  }
   primeAudio();
-  const practiceMode = state.settings.practiceMode || "mixed";
-  const plan = makePracticePlan(practiceMode);
+  const plan = makePracticePlan();
   currentLesson = {
     kind: "practice",
-    practiceMode,
     plan,
     stage: null,
     mode: null,
@@ -431,15 +426,33 @@ function startPractice() {
   nextQuestion();
 }
 
-function makeSkipAssessmentPlan(targetStage) {
-  // A skip assessment tests only the current stage. Each mode appears three
-  // times, giving nine questions without introducing later intervals.
-  const plan = [];
-  MODES.forEach(mode => {
-    for (let question = 0; question < 3; question += 1) {
-      plan.push({ stageId: targetStage.id, mode: mode.id });
-    }
+function uniqueStagesByLabel(stages) {
+  const seen = new Set();
+  return stages.filter(stage => {
+    if (seen.has(stage.label)) return false;
+    seen.add(stage.label);
+    return true;
   });
+}
+
+function makeSkipAssessmentPlan(targetStage) {
+  const earlierComparisons = uniqueStagesByLabel(
+    COURSE.slice(0, targetStage.id).filter(stage => stage.label !== targetStage.label)
+  );
+  const laterComparisons = uniqueStagesByLabel(
+    COURSE.filter(stage => stage.label !== targetStage.label)
+  );
+  const comparisonPool = uniqueStagesByLabel([...earlierComparisons, ...laterComparisons]);
+  const plan = [];
+
+  MODES.forEach(mode => {
+    const comparisons = shuffle(comparisonPool).slice(0, 2);
+    plan.push(
+      { stageId: targetStage.id, mode: mode.id, isTarget: true },
+      ...comparisons.map(stage => ({ stageId: stage.id, mode: mode.id, isTarget: false }))
+    );
+  });
+
   return shuffle(plan);
 }
 
@@ -481,23 +494,14 @@ function nextQuestion() {
 
 function renderQuestion() {
   const { stage, mode, questionNumber, total, score, question } = currentLesson;
-  const modeInfo = MODES.find(item => item.id === mode);
-  const isIntervalIdentification = mode === "read" || mode === "listen";
-
-  if (isIntervalIdentification) {
-    els.lessonKicker.textContent = currentLesson.kind === "practice"
-      ? `Practice · ${modeInfo.label}`
-      : currentLesson.kind === "skip"
-        ? `Skip assessment · ${modeInfo.label}`
-        : `Stage ${stage.id} · ${modeInfo.label}`;
-  } else {
-    els.lessonKicker.textContent = currentLesson.kind === "practice"
-      ? `Practice · ${modeInfo.label} · ${stage.singularTitle}`
-      : currentLesson.kind === "skip"
-        ? `Skip assessment · ${modeInfo.label} · ${stage.singularTitle}`
-        : `Stage ${stage.id} · ${modeInfo.label}`;
-  }
-
+  const modeInfo = getLessonModeInfo(mode);
+  const showIntervalNameInHeader = mode === "sing" || mode === "singPlus";
+  const headerPrefix = currentLesson.kind === "practice"
+    ? `Practice · ${modeInfo.label}`
+    : currentLesson.kind === "skip"
+      ? `Skip assessment · ${modeInfo.label}`
+      : `Stage ${stage.id} · ${modeInfo.label}`;
+  els.lessonKicker.textContent = showIntervalNameInHeader ? `${headerPrefix} · ${stage.singularTitle}` : headerPrefix;
   els.lessonProgressFill.style.width = `${((questionNumber - 1) / total) * 100}%`;
   els.scoreValue.textContent = score;
   els.lessonMessage.textContent = "";
@@ -521,18 +525,29 @@ function renderQuestion() {
     els.listenArea.classList.remove("hidden");
     renderAnswerButtons();
     if (state.settings.autoplay) setTimeout(playCurrentInterval, 250);
-  } else {
+  } else if (mode === "sing") {
     els.lessonPrompt.textContent = "Sing the target note";
     els.lessonSubprompt.textContent = `Listen to the starting note, then sing the ${stage.singularTitle.toLowerCase()}.`;
     els.notationArea.classList.remove("hidden");
     els.notationArea.innerHTML = renderStaff([question.first], state.settings.clef, false);
     els.singArea.classList.remove("hidden");
     els.singTargetText.textContent = stage.singularTitle;
+    els.recordButton.querySelector("strong").textContent = "Sing the target note";
     els.pitchFeedback.textContent = "Play the first note, then sing.";
+  } else {
+    els.lessonPrompt.textContent = "Sing the second note";
+    els.lessonSubprompt.textContent = "Listen to the starting note, then sing the note shown on the staff.";
+    els.notationArea.classList.remove("hidden");
+    els.notationArea.innerHTML = renderStaff([question.first, question.second], state.settings.clef, true);
+    els.singArea.classList.remove("hidden");
+    els.singTargetText.textContent = "Sing +";
+    els.recordButton.querySelector("strong").textContent = "Sing the second note";
+    els.pitchFeedback.textContent = "Play the first note, then sing the second note shown.";
   }
 }
 
 function renderAnswerButtons() {
+
   currentLesson.question.options.forEach(option => {
     const button = document.createElement("button");
     button.className = "answer-button";
@@ -678,13 +693,7 @@ function renderStaff(notes, clef, showSecond) {
   return `<svg viewBox="0 ${viewTop} ${width} ${height}" role="img" aria-label="Music notation in ${clef} clef">
     <text x="30" y="38" fill="#767990" font-size="14" font-weight="800">${notes[0].key || currentLesson?.question?.key || ""}</text>
     ${lines}${ledger}
-    <text
-      x="${clef === "treble" ? 102 : 108}"
-      y="${clef === "treble" ? bottomLineY + 4 : bottomLineY - 1}"
-      font-size="${clef === "treble" ? 92 : 72}"
-      font-family="'Noto Music', 'Apple Symbols', 'Segoe UI Symbol', 'Bravura Text', serif"
-      fill="#292a3b"
-    >${clefSymbol}</text>
+    <text x="112" y="139" font-size="80" font-family="serif" fill="#292a3b">${clefSymbol}</text>
     ${noteSvg}
   </svg>`;
 }
@@ -697,13 +706,15 @@ function diatonicIndex(letter, octave) {
 async function beginPitchCheck() {
   if (!currentLesson || currentLesson.answered) return;
   const q = currentLesson.question;
+  const isSingPlus = currentLesson.mode === "singPlus";
+  const intervalLabel = currentLesson.stage.singularTitle;
   try {
     playTone(q.first.midi, 0, 1.25);
-    els.pitchFeedback.textContent = "Listen to the starting note\u2026";
+    els.pitchFeedback.textContent = "Listen to the starting note…";
     await delay(1550);
     els.recordButton.classList.add("recording");
-    els.recordButton.querySelector("strong").textContent = "Listening\u2026";
-    els.pitchFeedback.textContent = "Hold the target note steadily.";
+    els.recordButton.querySelector("strong").textContent = "Listening…";
+    els.pitchFeedback.textContent = isSingPlus ? "Hold the second note steadily." : "Hold the target note steadily.";
 
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
     const ctx = getAudioContext();
@@ -728,7 +739,7 @@ async function beginPitchCheck() {
 
     stopMicrophone();
     els.recordButton.classList.remove("recording");
-    els.recordButton.querySelector("strong").textContent = "Sing the target note";
+    els.recordButton.querySelector("strong").textContent = isSingPlus ? "Sing the second note" : "Sing the target note";
     currentLesson.answered = true;
 
     if (pitches.length < 4) {
@@ -741,22 +752,44 @@ async function beginPitchCheck() {
     const target = q.second.midi;
     const signedCents = (median - target) * 100;
     const cents = Math.abs(signedCents);
+    const sungNote = midiToNoteLabel(median);
+    const targetNote = midiToNoteLabel(target);
     const correct = cents <= 55;
     if (correct) {
-      els.pitchFeedback.innerHTML = "Your pitch was <strong>in tune</strong>.";
+      els.pitchFeedback.innerHTML = isSingPlus
+        ? `You sang <strong>${sungNote}</strong>. Interval type: <strong>${intervalLabel}</strong>.`
+        : `You sang <strong>${sungNote}</strong>.`;
     } else {
-      const tendency = signedCents > 0 ? "sharp" : "flat";
-      els.pitchFeedback.innerHTML = `Your pitch was <strong>${Math.round(cents)} cents ${tendency}</strong>.`;
+      els.pitchFeedback.innerHTML = isSingPlus
+        ? `You sang <strong>${sungNote}</strong> instead of <strong>${targetNote}</strong>. Interval type: <strong>${intervalLabel}</strong>.`
+        : `You sang <strong>${sungNote}</strong> instead of <strong>${targetNote}</strong>.`;
     }
-    registerAnswer(correct, correct ? "Great pitch! That is the target note." : "Close — listen again and adjust towards the target pitch.");
+    registerAnswer(
+      correct,
+      isSingPlus
+        ? (correct
+            ? `Great pitch! You sang ${sungNote}. Interval type: ${intervalLabel}.`
+            : `Close — you sang ${sungNote}, but the target was ${targetNote}. Interval type: ${intervalLabel}.`)
+        : (correct
+            ? `Great pitch! You sang ${sungNote}.`
+            : `Close — you sang ${sungNote}, but the target was ${targetNote}.`)
+    );
   } catch (error) {
     stopMicrophone();
     els.recordButton.classList.remove("recording");
-    els.recordButton.querySelector("strong").textContent = "Sing the target note";
+    els.recordButton.querySelector("strong").textContent = currentLesson?.mode === "singPlus" ? "Sing the second note" : "Sing the target note";
     els.pitchFeedback.textContent = "Microphone access is needed for singing lessons.";
     els.lessonMessage.textContent = "Allow microphone access, then try again.";
     els.lessonMessage.className = "lesson-message bad";
   }
+}
+
+function midiToNoteLabel(midi) {
+
+  const names = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+  const note = names[((Math.round(midi) % 12) + 12) % 12];
+  const octave = Math.floor(Math.round(midi) / 12) - 1;
+  return `${note}${octave}`;
 }
 
 function stopMicrophone() {
@@ -828,10 +861,7 @@ function finishLesson() {
   if (isPractice) {
     els.resultTitle.textContent = passed ? "Practice complete!" : "Keep practising!";
     const intervalCount = new Set(currentLesson.plan.map(item => item.stageId)).size;
-    const practiceDescription = currentLesson.practiceMode === "mixed"
-      ? "across mixed Read, Listen and Sing questions"
-      : `using ${MODES.find(mode => mode.id === currentLesson.practiceMode)?.label || "Read"} questions only`;
-    els.resultSummary.textContent = `You reviewed ${intervalCount} interval stages ${practiceDescription}.`;
+    els.resultSummary.textContent = `You reviewed ${intervalCount} interval stages across mixed Read, Listen and Sing questions.`;
   } else if (isSkip) {
     els.resultTitle.textContent = passed ? "Stage skipped!" : "Assessment not passed";
     els.resultSummary.textContent = passed
@@ -879,27 +909,25 @@ function updateStreak() {
 function openSettings() {
   document.querySelector(`input[name="clef"][value="${state.settings.clef}"]`).checked = true;
   document.querySelector(`input[name="range"][value="${state.settings.range}"]`).checked = true;
-  const practiceMode = MODES.some(mode => mode.id === state.settings.practiceMode) || state.settings.practiceMode === "mixed"
-    ? state.settings.practiceMode
-    : "mixed";
-  document.querySelector(`input[name="practiceMode"][value="${practiceMode}"]`).checked = true;
+  const practiceMode = state.settings.practiceMode || "mixed";
+  const practiceInput = document.querySelector(`input[name="practiceMode"][value="${practiceMode}"]`);
+  if (practiceInput) practiceInput.checked = true;
   els.autoplayToggle.checked = state.settings.autoplay;
-  els.themeColorInput.value = normaliseHexColour(state.settings.themeColor);
   showView("settingsView");
 }
 
 function saveSettings() {
   state.settings.clef = document.querySelector('input[name="clef"]:checked').value;
   state.settings.range = document.querySelector('input[name="range"]:checked').value;
+  const practiceChecked = document.querySelector('input[name="practiceMode"]:checked');
+  state.settings.practiceMode = practiceChecked ? practiceChecked.value : "mixed";
   state.settings.autoplay = els.autoplayToggle.checked;
-  state.settings.practiceMode = document.querySelector('input[name="practiceMode"]:checked').value;
-  state.settings.themeColor = normaliseHexColour(els.themeColorInput.value);
-  applyTheme(state.settings.themeColor);
   saveState();
   showView("pathView");
 }
 
 function resetProgress() {
+
   const confirmed = window.confirm("Reset all course progress, XP and streak data on this browser?");
   if (!confirmed) return;
   state = clone(DEFAULT_STATE);
@@ -932,13 +960,5 @@ els.retryButton.addEventListener("click", () => {
   else startLesson(currentLesson.stage.id, currentLesson.mode, true);
 });
 
-document.querySelectorAll("[data-theme-colour]").forEach(button => {
-  button.addEventListener("click", () => {
-    els.themeColorInput.value = button.dataset.themeColour;
-  });
-});
-
 renderPathway();
-if ("serviceWorker" in navigator && location.protocol !== "file:") {
-  navigator.serviceWorker.register("./sw.js?v=11", { updateViaCache: "none" }).catch(() => {});
-}
+if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});
