@@ -64,7 +64,7 @@ const INTERVAL_OPTIONS = [...new Set(COURSE.map(stage => stage.label))];
 
 const DEFAULT_STATE = {
   curriculumVersion: CURRICULUM_VERSION,
-  settings: { clef: "treble", range: "middle", autoplay: true },
+  settings: { clef: "treble", range: "middle", autoplay: true, themeColor: "#5b4fe9", practiceMode: "mixed" },
   progress: {},
   xp: 0,
   streak: 0,
@@ -75,6 +75,36 @@ let state = loadState();
 let currentLesson = null;
 let audioContext = null;
 let mediaStream = null;
+
+function normaliseHexColour(value) {
+  const match = String(value || "").trim().match(/^#([0-9a-f]{6})$/i);
+  return match ? `#${match[1].toLowerCase()}` : DEFAULT_STATE.settings.themeColor;
+}
+
+function hexToRgb(hex) {
+  const clean = normaliseHexColour(hex).slice(1);
+  return [0, 2, 4].map(index => Number.parseInt(clean.slice(index, index + 2), 16));
+}
+
+function mixHex(hex, target, amount) {
+  const sourceRgb = hexToRgb(hex);
+  const targetRgb = hexToRgb(target);
+  const mixed = sourceRgb.map((value, index) => Math.round(value + (targetRgb[index] - value) * amount));
+  return `#${mixed.map(value => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function applyTheme(colour) {
+  const main = normaliseHexColour(colour);
+  const rgb = hexToRgb(main);
+  const rootStyle = document.documentElement.style;
+  rootStyle.setProperty("--purple", main);
+  rootStyle.setProperty("--purple-dark", mixHex(main, "#000000", 0.25));
+  rootStyle.setProperty("--purple-light", mixHex(main, "#ffffff", 0.22));
+  rootStyle.setProperty("--purple-pale", mixHex(main, "#ffffff", 0.9));
+  rootStyle.setProperty("--purple-rgb", rgb.join(", "));
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta) themeMeta.setAttribute("content", main);
+}
 
 function ensureEnhancementUi() {
   const returnPathButton = document.getElementById("returnPathButton");
@@ -120,7 +150,7 @@ const els = Object.fromEntries([
   "lessonKicker","lessonPrompt","lessonSubprompt","notationArea","listenArea","singArea","replayButton","recordButton",
   "pitchFeedback","singTargetText","answerGrid","lessonMessage","continueButton","lessonProgressFill","scoreValue",
   "resultTitle","resultSummary","resultScore","resultXp","nextLevelButton","returnPathButton","retryButton","navPath","navPractice","navSettings",
-  "autoplayToggle"
+  "autoplayToggle","themeColorInput"
 ].map(id => [id, document.getElementById(id)]));
 
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
@@ -179,6 +209,8 @@ function saveState() {
   setCookie("sightTrailState", raw);
   localStorage.setItem("sightTrailState", encodeURIComponent(raw));
 }
+
+applyTheme(state.settings.themeColor);
 
 function levelKey(stageId, mode) { return `${stageId}-${mode}`; }
 function isComplete(stageId, mode) { return Boolean(state.progress[levelKey(stageId, mode)]); }
@@ -362,12 +394,18 @@ function introducedStages() {
   return COURSE.slice(0, currentStage);
 }
 
-function makePracticePlan() {
+function makePracticePlan(practiceMode = state.settings.practiceMode) {
   const stages = shuffle(introducedStages());
   const plannedStages = [...stages];
   while (plannedStages.length < 6) {
     plannedStages.push(stages[Math.floor(Math.random() * stages.length)]);
   }
+
+  if (practiceMode !== "mixed") {
+    const selectedMode = MODES.some(mode => mode.id === practiceMode) ? practiceMode : "read";
+    return plannedStages.map(stage => ({ stageId: stage.id, mode: selectedMode }));
+  }
+
   const modes = [];
   while (modes.length < plannedStages.length) modes.push(...shuffle(MODES.map(mode => mode.id)));
   return plannedStages.map((stage, index) => ({ stageId: stage.id, mode: modes[index] }));
@@ -375,9 +413,11 @@ function makePracticePlan() {
 
 function startPractice() {
   primeAudio();
-  const plan = makePracticePlan();
+  const practiceMode = state.settings.practiceMode || "mixed";
+  const plan = makePracticePlan(practiceMode);
   currentLesson = {
     kind: "practice",
+    practiceMode,
     plan,
     stage: null,
     mode: null,
@@ -436,13 +476,14 @@ function nextQuestion() {
   currentLesson.questionNumber += 1;
   currentLesson.answered = false;
   currentLesson.question = makeQuestion(currentLesson.stage);
-  Question();
+  renderQuestion();
 }
 
 function renderQuestion() {
   const { stage, mode, questionNumber, total, score, question } = currentLesson;
   const modeInfo = MODES.find(item => item.id === mode);
   const isIntervalIdentification = mode === "read" || mode === "listen";
+
   if (isIntervalIdentification) {
     els.lessonKicker.textContent = currentLesson.kind === "practice"
       ? `Practice · ${modeInfo.label}`
@@ -456,6 +497,7 @@ function renderQuestion() {
         ? `Skip assessment · ${modeInfo.label} · ${stage.singularTitle}`
         : `Stage ${stage.id} · ${modeInfo.label}`;
   }
+
   els.lessonProgressFill.style.width = `${((questionNumber - 1) / total) * 100}%`;
   els.scoreValue.textContent = score;
   els.lessonMessage.textContent = "";
@@ -636,7 +678,13 @@ function renderStaff(notes, clef, showSecond) {
   return `<svg viewBox="0 ${viewTop} ${width} ${height}" role="img" aria-label="Music notation in ${clef} clef">
     <text x="30" y="38" fill="#767990" font-size="14" font-weight="800">${notes[0].key || currentLesson?.question?.key || ""}</text>
     ${lines}${ledger}
-    <text x="112" y="139" font-size="80" font-family="serif" fill="#292a3b">${clefSymbol}</text>
+    <text
+      x="${clef === "treble" ? 102 : 108}"
+      y="${clef === "treble" ? bottomLineY + 4 : bottomLineY - 1}"
+      font-size="${clef === "treble" ? 92 : 72}"
+      font-family="'Noto Music', 'Apple Symbols', 'Segoe UI Symbol', 'Bravura Text', serif"
+      fill="#292a3b"
+    >${clefSymbol}</text>
     ${noteSvg}
   </svg>`;
 }
@@ -780,7 +828,10 @@ function finishLesson() {
   if (isPractice) {
     els.resultTitle.textContent = passed ? "Practice complete!" : "Keep practising!";
     const intervalCount = new Set(currentLesson.plan.map(item => item.stageId)).size;
-    els.resultSummary.textContent = `You reviewed ${intervalCount} interval stages across mixed Read, Listen and Sing questions.`;
+    const practiceDescription = currentLesson.practiceMode === "mixed"
+      ? "across mixed Read, Listen and Sing questions"
+      : `using ${MODES.find(mode => mode.id === currentLesson.practiceMode)?.label || "Read"} questions only`;
+    els.resultSummary.textContent = `You reviewed ${intervalCount} interval stages ${practiceDescription}.`;
   } else if (isSkip) {
     els.resultTitle.textContent = passed ? "Stage skipped!" : "Assessment not passed";
     els.resultSummary.textContent = passed
@@ -828,7 +879,12 @@ function updateStreak() {
 function openSettings() {
   document.querySelector(`input[name="clef"][value="${state.settings.clef}"]`).checked = true;
   document.querySelector(`input[name="range"][value="${state.settings.range}"]`).checked = true;
+  const practiceMode = MODES.some(mode => mode.id === state.settings.practiceMode) || state.settings.practiceMode === "mixed"
+    ? state.settings.practiceMode
+    : "mixed";
+  document.querySelector(`input[name="practiceMode"][value="${practiceMode}"]`).checked = true;
   els.autoplayToggle.checked = state.settings.autoplay;
+  els.themeColorInput.value = normaliseHexColour(state.settings.themeColor);
   showView("settingsView");
 }
 
@@ -836,6 +892,9 @@ function saveSettings() {
   state.settings.clef = document.querySelector('input[name="clef"]:checked').value;
   state.settings.range = document.querySelector('input[name="range"]:checked').value;
   state.settings.autoplay = els.autoplayToggle.checked;
+  state.settings.practiceMode = document.querySelector('input[name="practiceMode"]:checked').value;
+  state.settings.themeColor = normaliseHexColour(els.themeColorInput.value);
+  applyTheme(state.settings.themeColor);
   saveState();
   showView("pathView");
 }
@@ -873,5 +932,13 @@ els.retryButton.addEventListener("click", () => {
   else startLesson(currentLesson.stage.id, currentLesson.mode, true);
 });
 
+document.querySelectorAll("[data-theme-colour]").forEach(button => {
+  button.addEventListener("click", () => {
+    els.themeColorInput.value = button.dataset.themeColour;
+  });
+});
+
 renderPathway();
-if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  navigator.serviceWorker.register("./sw.js?v=11", { updateViaCache: "none" }).catch(() => {});
+}

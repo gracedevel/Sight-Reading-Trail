@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#5b4fe9" />
   <meta name="description" content="A mobile-first interval sight-reading course with read, listen and sing lessons." />
-  <link rel="manifest" href="manifest.json" />
-  <link rel="icon" href="icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css?v=11" />
   <title>Sight Reading Trail</title>
 </head>
 <body>
@@ -111,6 +111,30 @@
           </fieldset>
 
           <fieldset>
+            <legend>Theme colour</legend>
+            <label class="theme-colour-row">
+              <span><strong>Accent colour</strong><small>Choose the main colour used throughout the app</small></span>
+              <input id="themeColorInput" type="color" value="#5b4fe9" aria-label="Choose theme colour" />
+            </label>
+            <div class="theme-presets" aria-label="Theme colour presets">
+              <button type="button" class="theme-swatch" data-theme-colour="#5b4fe9" style="--swatch:#5b4fe9" aria-label="Purple"></button>
+              <button type="button" class="theme-swatch" data-theme-colour="#1976d2" style="--swatch:#1976d2" aria-label="Blue"></button>
+              <button type="button" class="theme-swatch" data-theme-colour="#168a68" style="--swatch:#168a68" aria-label="Green"></button>
+              <button type="button" class="theme-swatch" data-theme-colour="#e85d5d" style="--swatch:#e85d5d" aria-label="Coral"></button>
+              <button type="button" class="theme-swatch" data-theme-colour="#d97706" style="--swatch:#d97706" aria-label="Amber"></button>
+              <button type="button" class="theme-swatch" data-theme-colour="#c24186" style="--swatch:#c24186" aria-label="Pink"></button>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Practice mode</legend>
+            <label class="choice-row"><input type="radio" name="practiceMode" value="mixed" checked /><span><strong>Mixed</strong><small>Rotate between Read, Listen and Sing</small></span><b>♫</b></label>
+            <label class="choice-row"><input type="radio" name="practiceMode" value="read" /><span><strong>Read only</strong><small>Practise interval identification from notation</small></span><b>♩</b></label>
+            <label class="choice-row"><input type="radio" name="practiceMode" value="listen" /><span><strong>Listen only</strong><small>Practise interval identification by ear</small></span><b>♪</b></label>
+            <label class="choice-row"><input type="radio" name="practiceMode" value="sing" /><span><strong>Sing only</strong><small>Practise producing each target interval</small></span><b>●</b></label>
+          </fieldset>
+
+          <fieldset>
             <legend>Sound</legend>
             <label class="toggle-row"><span><strong>Auto-play read and listening questions</strong><small>Play each interval when it appears</small></span><input id="autoplayToggle" type="checkbox" checked /></label>
           </fieldset>
@@ -128,6 +152,6 @@
       <button id="navSettings"><span>⚙</span><small>Settings</small></button>
     </nav>
   </div>
-  <script src="app.js"></script>
+  <script src="./app.js?v=11"></script>
 </body>
 </html>

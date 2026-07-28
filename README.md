@@ -50,3 +50,13 @@ Then select **Launch Sight Reading Trail on localhost** in VS Code and press `F5
 - `manifest.json` and `sw.js` - installable offline support
 - `icon.svg` - app icon
 - `.vscode/launch.json` - direct-file and localhost Chrome launch configurations
+
+## GitHub Pages deployment
+
+Upload the files in this folder directly to the repository root. In **Settings > Pages**, publish the `main` branch from `/(root)`. This build uses versioned JavaScript and CSS URLs plus service-worker cache `v10`, so the newest deployment is fetched instead of an older cached copy.
+
+
+## New settings
+
+- Custom theme colour with presets and a browser colour picker.
+- Practice can be set to Mixed, Read only, Listen only or Sing only.
