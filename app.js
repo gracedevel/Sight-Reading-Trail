@@ -119,26 +119,6 @@ function getLessonModeInfo(mode) {
   return MODES.find(item => item.id === mode) || { id: mode, label: String(mode || ""), icon: "" };
 }
 
-function ensurePracticeModeSettingsUi() {
-  const settingsCard = document.querySelector(".settings-card");
-  if (!settingsCard || document.getElementById("practiceModeFieldset")) return;
-
-  const soundFieldset = settingsCard.querySelector('fieldset:nth-of-type(3)');
-  const fieldset = document.createElement("fieldset");
-  fieldset.id = "practiceModeFieldset";
-  fieldset.innerHTML = `
-    <legend>Practice mode</legend>
-    <label class="choice-row"><input type="radio" name="practiceMode" value="mixed" checked /><span><strong>Mixed</strong><small>Read, listen, sing and sing +</small></span><b>◎</b></label>
-    <label class="choice-row"><input type="radio" name="practiceMode" value="read" /><span><strong>Read only</strong><small>Show the notation only</small></span><b>♩</b></label>
-    <label class="choice-row"><input type="radio" name="practiceMode" value="listen" /><span><strong>Listen only</strong><small>Hear the interval only</small></span><b>♪</b></label>
-    <label class="choice-row"><input type="radio" name="practiceMode" value="sing" /><span><strong>Sing only</strong><small>See the first note and sing the target note</small></span><b>●</b></label>
-    <label class="choice-row"><input type="radio" name="practiceMode" value="singPlus" /><span><strong>Sing + only</strong><small>See both notes and sing the second note</small></span><b>○</b></label>
-  `;
-  settingsCard.insertBefore(fieldset, soundFieldset || null);
-}
-
-ensurePracticeModeSettingsUi();
-
 const els = Object.fromEntries([
 
   "pathView","lessonView","resultView","settingsView","pathway","xpValue","streakValue","progressText","progressFill",
