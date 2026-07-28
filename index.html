@@ -7,7 +7,7 @@
   <meta name="description" content="A mobile-first interval sight-reading course with read, listen and sing lessons." />
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="./styles.css?v=11" />
+  <link rel="stylesheet" href="./styles.css?v=12" />
   <title>Sight Reading Trail</title>
 </head>
 <body>
@@ -128,15 +128,11 @@
 
           <fieldset>
             <legend>Practice mode</legend>
-            <label class="choice-row"><input type="radio" name="practiceMode" value="mixed" checked /><span><strong>Mixed</strong><small>Rotate between Read, Listen and Sing</small></span><b>♫</b></label>
+            <label class="choice-row"><input type="radio" name="practiceMode" value="mixed" checked /><span><strong>Mixed</strong><small>Rotate between Read, Listen, Sing and Sing +</small></span><b>♫</b></label>
             <label class="choice-row"><input type="radio" name="practiceMode" value="read" /><span><strong>Read only</strong><small>Practise interval identification from notation</small></span><b>♩</b></label>
             <label class="choice-row"><input type="radio" name="practiceMode" value="listen" /><span><strong>Listen only</strong><small>Practise interval identification by ear</small></span><b>♪</b></label>
             <label class="choice-row"><input type="radio" name="practiceMode" value="sing" /><span><strong>Sing only</strong><small>Practise producing each target interval</small></span><b>●</b></label>
-          </fieldset>
-
-          <fieldset>
-            <legend>Sound</legend>
-            <label class="toggle-row"><span><strong>Auto-play read and listening questions</strong><small>Play each interval when it appears</small></span><input id="autoplayToggle" type="checkbox" checked /></label>
+            <label class="choice-row"><input type="radio" name="practiceMode" value="singPlus" /><span><strong>Sing + only</strong><small>See both notes and sing the second note</small></span><b>○</b></label>
           </fieldset>
 
           <button id="saveSettingsButton" class="primary-button">Save settings</button>
@@ -152,6 +148,6 @@
       <button id="navSettings"><span>⚙</span><small>Settings</small></button>
     </nav>
   </div>
-  <script src="./app.js?v=11"></script>
+  <script src="./app.js?v=12"></script>
 </body>
 </html>
